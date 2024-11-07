@@ -13,9 +13,21 @@ from mesa.time import RandomActivation
 from mesa.space import MultiGrid
 from mesa.visualization.ModularVisualization import ModularServer
 from mesa.visualization.UserParam import Slider
-from mesa.visualization.modules import CanvasGrid
+from mesa.visualization.modules import CanvasGrid, ChartModule, TextElement
+from mesa.datacollection import DataCollector
 import random
 import time
+
+class Spacer(TextElement):
+    """
+    Elemento para agregar un espacio en la visualización.
+    """
+
+    def __init__(self):
+        pass
+
+    def render(self, _):
+        return ""
 
 class CleaningRobot(Agent):
     """
@@ -111,6 +123,13 @@ class CleaningSimulation(Model):
         self.initialDirtyCells = int(width * height * dirtPercentage)
         self.stepsExecuted = 0
         
+        # Inicializar DataCollector
+        self.datacollector = DataCollector(
+            model_reporters={
+                "Celdas Limpias": lambda m: m.cleanCells
+            }
+        )
+        
         self.setupEnvironment()
         
     def setupEnvironment(self):
@@ -151,7 +170,7 @@ class CleaningSimulation(Model):
         robots = [agent for agent in self.schedule.agents if isinstance(agent, CleaningRobot)]
         elapsedTime = time.time() - self.startTime
         stats = {
-            "PorcentajeCompletado": (self.cleanCells / self.initialDirtyCells) * 100,
+            "PorcentajeCompletado": (self.cleanCells / self.initialDirtyCells) * 100 if self.initialDirtyCells > 0 else 100,
             "TiempoTranscurrido": elapsedTime,
             "MovimientosTotales": sum(robot.totalMovements for robot in robots)
         }
@@ -174,6 +193,8 @@ class CleaningSimulation(Model):
         else:
             self.schedule.step()
             self.stepsExecuted += 1
+            # Recolectar datos después de cada paso
+            self.datacollector.collect(self)
 
 def renderAgent(agent):
     """
@@ -260,11 +281,17 @@ def createSimulationServer():
 
     # Crear visualización de la cuadrícula
     grid = CanvasGrid(renderAgent, 20, 20, 500, 500)
-    
+
+    # Crear instancia de ChartModule
+    chart = ChartModule(
+        [{"Label": "Celdas Limpias", "Color": "Green"}],
+        data_collector_name='datacollector'
+    )
+
     # Crear y retornar el servidor
     server = ModularServer(
         CleaningSimulation,
-        [grid],
+        [grid, Spacer(), chart, Spacer()],
         "Simulación de Robots de Limpieza",
         modelParams
     )
